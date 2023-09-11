@@ -17,7 +17,7 @@ use pathfinding::*;
 mod frame_culling;
 use frame_culling::*;
 
-const WIN_TITLE: &str = "A* algrorythim snake, but written by a dumbass teenager";
+const WIN_TITLE: &str = "A* (kinda) algrorythim snake, but written by a dumbass teenager";
 pub const WIN_DIM: [u32;2] = [800, 800];
 
 pub const SNAKE_GRID_SIZE: [u32;2] = [30;2];
@@ -48,9 +48,9 @@ pub fn main() {
 
     let mut pixel_buffer = PixelBuffer::new();
     
-    let mut snake = Snake::new([255, 255, 0], [15, 15]);
+    let mut snake = Snake::new([(SNAKE_GRID_SIZE[0]/2) as i32;2]);
     
-    let mut frame_culling = FrameCulling::new(10);
+    let mut frame_culling = FrameCulling::new(20);
 
     let mut test_path = Path::new(vec![]);
 

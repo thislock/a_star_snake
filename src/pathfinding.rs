@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct Path {
   pub steps: Vec<[i32;2]>,
   steps_taken: u32,
+  pub emergency_regenerage_path: bool,
 }
 
 impl Path {
@@ -13,11 +14,16 @@ impl Path {
     Path {
       steps: path,
       steps_taken: 0,
+      emergency_regenerage_path: false,
     }
   }
 
+  pub const PATH_TYPE_FAILED: i32 = -1;
+  pub const PATH_TYPE_SUCCESS: i32 = 1;
+  pub const PATH_TYPE_UNKNOWN: i32 = 0;
+
   // generates every possible path, that brings the snake closer to the apple, and picks the shortest one
-  pub fn generate_path(&mut self, snake: &mut Snake) {
+  pub fn generate_path(&mut self, snake: &mut Snake) -> i32 {
     
     // maximum possible path size, if it getts bigger than this, we have an issue
     let path_limit = SNAKE_GRID_SIZE[0]*SNAKE_GRID_SIZE[1];
@@ -27,6 +33,8 @@ impl Path {
 
     let mut paths: HashMap<u32, (Self, bool)> = HashMap::new();
     let mut on_id = 0;
+
+    let path_type;
     
     // create the first branching path(s)
     self.check_outcomes_from(snake).iter().for_each(|i| {
@@ -115,9 +123,13 @@ impl Path {
       println!("found path, while checking {} paths", on_id);
       println!("{:?}", success);
       *self = success;
+      path_type = Self::PATH_TYPE_SUCCESS;
     } else {
       println!("could not find viable path for snake");
+      path_type = Self::PATH_TYPE_FAILED;
     }
+
+    path_type
     
   }
   

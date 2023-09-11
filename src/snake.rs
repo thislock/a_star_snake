@@ -1,4 +1,4 @@
-use crate::{draw::{Color, PixelBuffer}, SNAKE_GRID_SIZE_I32, pathfinding::Path};
+use crate::{draw::{Color, PixelBuffer}, SNAKE_GRID_SIZE_I32, pathfinding::Path, SNAKE_GRID_SIZE};
 use std::collections::HashMap;
 use rand::prelude::*;
 
@@ -24,12 +24,12 @@ pub struct Snake {
 
 impl Snake {
   // truely remarkable, i wrote it IN the class this time instead of fn SnAke_NeW() or some nonsence outside the class
-  pub fn new(snake_color: Color, snake_pos: [i32;2]) -> Self {
+  pub fn new(snake_pos: [i32;2]) -> Self {
     let mut rng = rand::thread_rng();
     Snake {
       snake_head: (snake_pos, [0, 0], [0,0]),
       snake_body: HashMap::new(),
-      apple_pos: [rng.gen_range(0..25), rng.gen_range(0..25)],
+      apple_pos: [rng.gen_range(0..SNAKE_GRID_SIZE[0] as i32), rng.gen_range(0..SNAKE_GRID_SIZE[0] as i32)],
     }
   }
 
@@ -92,19 +92,35 @@ impl Snake {
       
       self.grow();
       let mut rng = rand::thread_rng();
-      let mut new_apple_pos = [rng.gen_range(0..25), rng.gen_range(0..25)];
+      let mut new_apple_pos = [rng.gen_range(0..SNAKE_GRID_SIZE[0]) as i32, rng.gen_range(0..SNAKE_GRID_SIZE[1] as i32)];
       while new_apple_pos == self.snake_head.0 {
-        new_apple_pos = [rng.gen_range(0..25), rng.gen_range(0..25)];
+        new_apple_pos = [rng.gen_range(0..SNAKE_GRID_SIZE[0] as i32), rng.gen_range(0..SNAKE_GRID_SIZE[1]) as i32];
       }
       self.apple_pos = new_apple_pos;
       
       if path.is_some() {
         let unwraped_path = path.unwrap();
-        unwraped_path.generate_path(self);
+        let path_result = unwraped_path.generate_path(self);
+        // for if, at that time a new path needs to be generated
+        if path_result == Path::PATH_TYPE_FAILED {
+          unwraped_path.emergency_regenerage_path = true;
+        }
         self.follow_path(unwraped_path);
+      } else {
+        if path.is_some() {
+          let unwraped_path = path.unwrap();
+          unwraped_path.generate_path(self);
+          self.follow_path(unwraped_path);
+        }
       }
 
       return true;
+    }
+
+    if path.is_some() {
+      let unwraped_path = path.unwrap();
+      unwraped_path.generate_path(self);
+      self.follow_path(unwraped_path);
     }
 
     false
