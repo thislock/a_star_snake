@@ -31,9 +31,20 @@ impl Path {
     // create the first branching path(s)
     self.check_outcomes_from(snake).iter().for_each(|i| {
       let possible_path = Self::new(vec![*i]);
-      if !possible_path.simulate_path(snake) {
+      let mut result= [[0, 0];2];
+      possible_path.ensure_safety(snake, &mut result);
+      if !possible_path.simulate_path(snake) && *i != [0,0] {
         paths.insert(on_id, (possible_path, false));
         on_id += 1;
+      }
+      if *i == [0, 0] {
+        for u in result.iter() {
+          let possible_path = Self::new(vec![*u]);
+          if !possible_path.simulate_path(snake) {
+            paths.insert(on_id, (possible_path, false));
+            on_id += 1;
+          }
+        }
       }
     });
     
@@ -46,34 +57,43 @@ impl Path {
       
       let mut changes: Vec<Path> = vec![];
       
+      let mut deletions = vec![];
+
       paths.iter_mut().for_each(|i| {
         
-        let mut reversed_self = i.1.0.clone(); reversed_self.reverse();
-        let reversed_self = reversed_self;
-        let movement_options;
-        if snake.add_path(&reversed_self).is_some() {
-          movement_options = i.1.0.check_outcomes_from(&snake.add_path(&reversed_self).unwrap());
+        // make sure this path is still valid, if not mark if for deletion.
+        if i.1.0.simulate_path(snake) {
+          deletions.push(*i.0);
         } else {
-          let mut result = [[0;2];2];
-          self.ensure_safety(snake, &mut result);
-          movement_options = result;
-        }
-        
-        for u in 0..2 {
-          if movement_options[u] != [0,0] {
-            if u == 0 {
-              i.1.0.steps.push(movement_options[u]);
-            } else {
-              let mut new_branch = i.1.0.steps.clone();
-              new_branch.push(movement_options[u]);
-              changes.push(i.1.0.clone())
+
+          let mut reversed_self = i.1.0.clone(); reversed_self.reverse();
+          let reversed_self = reversed_self;
+          let movement_options;
+          if snake.add_path(&reversed_self).is_some() {
+            movement_options = i.1.0.check_outcomes_from(&snake.add_path(&reversed_self).unwrap());
+          } else {
+            let mut result = [[0;2];2];
+            self.ensure_safety(snake, &mut result);
+            movement_options = result;
+          }
+          
+          for u in 0..2 {
+            if movement_options[u] != [0,0] {
+              if u == 0 {
+                i.1.0.steps.push(movement_options[u]);
+              } else {
+                let mut new_branch = i.1.0.steps.clone();
+                new_branch.push(movement_options[u]);
+                changes.push(i.1.0.clone())
+              }
             }
           }
-        }
-        
-        if reversed_self.path_finished(snake) {
-          i.1.1 = true;
-          found_apple = true;
+          
+          if reversed_self.path_finished(snake) {
+            i.1.1 = true;
+            found_apple = true;
+          }  
+
         }
         
       });
@@ -83,6 +103,10 @@ impl Path {
         on_id += 1;
       });
       
+      deletions.iter().for_each(|i| {
+        paths.remove(i);
+      });
+
     }
     
     let successful_path = paths.iter().find(|i| i.1.1);
