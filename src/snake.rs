@@ -107,7 +107,8 @@ impl Snake {
         }
         self.follow_path(unwraped_path);
       } else {
-        if path.is_some() {
+        // some broken code meant to regen a path if it stinks, but instead just slows everything down
+        if false {
           let unwraped_path = path.unwrap();
           unwraped_path.generate_path(self);
           self.follow_path(unwraped_path);
