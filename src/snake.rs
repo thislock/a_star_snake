@@ -106,23 +106,17 @@ impl Snake {
           unwraped_path.emergency_regenerage_path = true;
         }
         self.follow_path(unwraped_path);
-      } else {
-        // some broken code meant to regen a path if it stinks, but instead just slows everything down
-        if false {
-          let unwraped_path = path.unwrap();
-          unwraped_path.generate_path(self);
-          self.follow_path(unwraped_path);
-        }
       }
 
       return true;
     }
 
-    if path.is_some() {
-      let unwraped_path = path.unwrap();
-      unwraped_path.generate_path(self);
-      self.follow_path(unwraped_path);
-    }
+    // some broken code meant to regen a path if it stinks, but instead just slows everything down
+    // if path.is_some() {
+    //   let unwraped_path = path.unwrap();
+    //   unwraped_path.generate_path(self);
+    //   self.follow_path(unwraped_path);
+    // }
 
     false
 

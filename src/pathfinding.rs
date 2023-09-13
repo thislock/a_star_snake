@@ -20,26 +20,22 @@ impl Path {
 
   pub const PATH_TYPE_FAILED: i32 = -1;
   pub const PATH_TYPE_SUCCESS: i32 = 1;
-  pub const PATH_TYPE_UNKNOWN: i32 = 0;
 
   // generates every possible path, that brings the snake closer to the apple, and picks the shortest one
   pub fn generate_path(&mut self, snake: &mut Snake) -> i32 {
     
     // maximum possible path size, if it getts bigger than this, we have an issue
-    let path_limit = SNAKE_GRID_SIZE[0]*SNAKE_GRID_SIZE[1];
-    let mut limit_counter = 0;
+    const PATH_LIMIT: u32 = SNAKE_GRID_SIZE[0]*SNAKE_GRID_SIZE[1];
 
     let mut found_apple = false;
 
     let mut paths: HashMap<u32, (Self, bool)> = HashMap::new();
     let mut on_id = 0;
-
-    let path_type;
     
     // create the first branching path(s)
     self.check_outcomes_from(snake).iter().for_each(|i| {
       let possible_path = Self::new(vec![*i]);
-      let mut result= [[0, 0];2];
+      let mut result= [[0, 0];4];
       possible_path.ensure_safety(snake, &mut result);
       if !possible_path.simulate_path(snake) && *i != [0,0] {
         paths.insert(on_id, (possible_path, false));
@@ -57,8 +53,7 @@ impl Path {
     });
     
     'find_path: while !found_apple {
-      limit_counter+=1;
-      if limit_counter == path_limit {
+      if paths.len() as u32 == PATH_LIMIT {
         println!("pathfinding overflow: attempted to create a path larger than all board pieces");
         break 'find_path;
       }
@@ -67,41 +62,14 @@ impl Path {
       
       let mut deletions = vec![];
 
+      // this shit is the thing being run like, 99999 or something times per cycle, so keep that in mind i guess
       paths.iter_mut().for_each(|i| {
         
         // make sure this path is still valid, if not mark if for deletion.
-        if i.1.0.simulate_path(snake) {
+        if i.1.0.simulate_path(snake) || i.1.0.steps.contains(&[0,0]) {
           deletions.push(*i.0);
         } else {
-
-          let mut reversed_self = i.1.0.clone(); reversed_self.reverse();
-          let reversed_self = reversed_self;
-          let movement_options;
-          if snake.add_path(&reversed_self).is_some() {
-            movement_options = i.1.0.check_outcomes_from(&snake.add_path(&reversed_self).unwrap());
-          } else {
-            let mut result = [[0;2];2];
-            self.ensure_safety(snake, &mut result);
-            movement_options = result;
-          }
-          
-          for u in 0..2 {
-            if movement_options[u] != [0,0] {
-              if u == 0 {
-                i.1.0.steps.push(movement_options[u]);
-              } else {
-                let mut new_branch = i.1.0.steps.clone();
-                new_branch.push(movement_options[u]);
-                changes.push(i.1.0.clone())
-              }
-            }
-          }
-          
-          if reversed_self.path_finished(snake) {
-            i.1.1 = true;
-            found_apple = true;
-          }  
-
+          self.generate_path_branch(&mut changes, snake, &mut found_apple, i);
         }
         
       });
@@ -116,6 +84,8 @@ impl Path {
       });
 
     }
+    
+    let path_type;
     
     let successful_path = paths.iter().find(|i| i.1.1);
     if successful_path.is_some() {
@@ -133,13 +103,72 @@ impl Path {
     
   }
   
+  fn generate_path_branch(&self, changes: &mut Vec<Path>, snake: &Snake, found_apple: &mut bool, i: (&u32, &mut (Path, bool))) {
+
+    let mut reversed_self = i.1.0.clone(); reversed_self.reverse();
+    let reversed_self = reversed_self;
+
+    let movement_options;
+    if let Some(snake_path) = snake.add_path(&reversed_self) {
+      movement_options = i.1.0.check_outcomes_from(&snake_path);
+    } else {
+      let mut result = [[0;2];4];
+      self.ensure_safety(snake, &mut result);
+      movement_options = result;
+    }
+          
+    for u in 0..movement_options.len() {
+      if movement_options[u] != [0,0] {
+        if u == 0 {
+          i.1.0.steps.push(movement_options[u]);
+        } else {
+          let mut new_branch = i.1.0.steps.clone();
+          new_branch.push(movement_options[u]);
+          changes.push(i.1.0.clone())
+        }
+      }
+    }
+          
+    if reversed_self.path_finished(snake) {
+      i.1.1 = true;
+      *found_apple = true;
+    }
+
+  }
+  
+  // returns the movements possible from where the snake is now
+  fn check_outcomes_from(&self, snake: &Snake) -> [[i32;2];4] {
+
+    let mut result = [[0;2];4];
+
+    let possible_snake_heads = [
+      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_LEFT)),  SNAKE_DIR_LEFT),
+      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_RIGHT)), SNAKE_DIR_RIGHT),
+      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_UP)),    SNAKE_DIR_UP),
+      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_DOWN)),  SNAKE_DIR_DOWN),
+    ];
+
+    let mut l = 0;
+    possible_snake_heads.iter().for_each(|i| {
+      if i.0 {
+        result[l] = i.1;
+        l += 1;
+      }
+    });
+
+    // a broken feature
+    //self.ensure_safety(snake, &mut result);  
+    
+    result
+    
+  }
+
   // checks if a given path has reached the apple
   fn path_finished(&self, snake: &Snake) -> bool {
 
     let mut result = false;
 
-    let accual_path = {let mut reversed = self.clone(); reversed.reverse(); reversed};
-    let possible_snake = snake.add_path(&accual_path);
+    let possible_snake = snake.add_path(self);
     if possible_snake.is_some() {
       let possible_snake = possible_snake.unwrap();
       if possible_snake.snake_head.0 == snake.apple_pos {
@@ -176,34 +205,8 @@ impl Path {
 
   }
 
-  // returns the movements possible from where the snake is now
-  fn check_outcomes_from(&self, snake: &Snake) -> [[i32;2];2] {
-
-    let mut result = [[0;2];2];
-
-    let possible_snake_heads = [
-      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_LEFT)),  SNAKE_DIR_LEFT),
-      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_RIGHT)), SNAKE_DIR_RIGHT),
-      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_UP)),    SNAKE_DIR_UP),
-      (self.closer(snake, snake.snake_head.0, add_arrays(snake.snake_head.0, SNAKE_DIR_DOWN)),  SNAKE_DIR_DOWN),
-    ];
-
-    let mut l = 0;
-    possible_snake_heads.iter().for_each(|i| {
-      if i.0 {
-        result[l] = i.1;
-        l += 1;
-      }
-    });
-
-    //self.ensure_safety(snake, &mut result);  
-    
-    result
-    
-  }
-  
   // make sure none of the options would result in death, and if so, just change it to something random to survive
-  fn ensure_safety(&self, snake: &Snake, result: &mut [[i32;2];2]) {
+  fn ensure_safety(&self, snake: &Snake, result: &mut [[i32;2];4]) {
     let fake_path = {let mut fp = self.clone(); fp.reverse(); fp};
     result.iter_mut().for_each(|i| {
       let fakepath_addition = {let mut e = fake_path.clone(); e.steps.push(*i); e};
@@ -227,7 +230,7 @@ impl Path {
         });
 
         if !any_done {
-          *i = [1,0];
+          *i = [0,0];
         }
 
       }
@@ -286,6 +289,13 @@ impl Snake {
 fn add_arrays(a: [i32;2], b: [i32;2]) -> [i32;2] {
   [a[0] + b[0], a[1] + b[1]]
 } 
+
+macro_rules! dst_from {
+  ($a: expr, $b: expr) => {
+    ($a - $b).abs()
+  };
+}
+
 fn pythagerian_therum(a: [i32;2], b:[i32;2]) -> f32 {
-  (((a[0] - b[0]).abs().pow(2) + (a[1] - b[1]).abs().pow(2))as f32).sqrt()
+  ((dst_from!(a[0], b[0]).pow(2) + dst_from!(a[1], b[1]).pow(2)) as f32).sqrt()
 }
