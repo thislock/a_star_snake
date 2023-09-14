@@ -1,5 +1,8 @@
 use crate::{snake::{Snake, SNAKE_DIR_RIGHT, SNAKE_DIR_LEFT, SNAKE_DIR_UP, SNAKE_DIR_DOWN}, SNAKE_GRID_SIZE};
-use std::collections::HashMap;
+use std::{collections::HashMap, thread};
+
+use rayon::prelude::*;
+use sdl2::libc::_SC_THREAD_CPUTIME;
 
 #[derive(Clone, Debug)]
 pub struct Path {
@@ -34,6 +37,7 @@ impl Path {
     
     // create the first branching path(s)
     self.check_outcomes_from(snake).iter().for_each(|i| {
+
       let possible_path = Self::new(vec![*i]);
       let mut result= [[0, 0];4];
       possible_path.ensure_safety(snake, &mut result);
@@ -54,24 +58,21 @@ impl Path {
     
     'find_path: while !found_apple {
       if paths.len() as u32 == PATH_LIMIT {
-        println!("pathfinding overflow: attempted to create a path larger than all board pieces");
+        println!("pathfinding overflow: attempted to create a path larger than all board pieces.");
         break 'find_path;
       }
       
-      let mut changes: Vec<Path> = vec![];
+      let mut changes = vec![];
       
       let mut deletions = vec![];
 
-      // this shit is the thing being run like, 99999 or something times per cycle, so keep that in mind i guess
+      // make sure this path is still valid, if not mark if for deletion.
       paths.iter_mut().for_each(|i| {
-        
-        // make sure this path is still valid, if not mark if for deletion.
-        if i.1.0.simulate_path(snake) || i.1.0.steps.contains(&[0,0]) {
+        if i.1.0.simulate_path(snake) {
           deletions.push(*i.0);
         } else {
-          self.generate_path_branch(&mut changes, snake, &mut found_apple, i);
+          self.generate_path_branch(&mut deletions, &mut changes, snake, &mut found_apple, i);
         }
-        
       });
       
       changes.iter().for_each(|y| {
@@ -103,22 +104,26 @@ impl Path {
     
   }
   
-  fn generate_path_branch(&self, changes: &mut Vec<Path>, snake: &Snake, found_apple: &mut bool, i: (&u32, &mut (Path, bool))) {
+  fn generate_path_branch(&self, deletions: &mut Vec<u32>, changes: &mut Vec<Path>, snake: &Snake, found_apple: &mut bool, i: (&u32, &mut (Path, bool))) {
 
     let mut reversed_self = i.1.0.clone(); reversed_self.reverse();
     let reversed_self = reversed_self;
+
+    // for if a viable direction can be found for this path
+    let mut success = true;
 
     let movement_options;
     if let Some(snake_path) = snake.add_path(&reversed_self) {
       movement_options = i.1.0.check_outcomes_from(&snake_path);
     } else {
       let mut result = [[0;2];4];
-      self.ensure_safety(snake, &mut result);
+      // set whether it found a usable direction or not
+      success = self.ensure_safety(snake, &mut result);
       movement_options = result;
     }
-          
+
     for u in 0..movement_options.len() {
-      if movement_options[u] != [0,0] {
+      if movement_options[u] != [0,0] && success {
         if u == 0 {
           i.1.0.steps.push(movement_options[u]);
         } else {
@@ -132,6 +137,11 @@ impl Path {
     if reversed_self.path_finished(snake) {
       i.1.1 = true;
       *found_apple = true;
+    }
+
+    // marks this path for deletion if it couldnt find a surviving direction to go in
+    if !success {
+      deletions.push(*i.0);
     }
 
   }
@@ -206,7 +216,11 @@ impl Path {
   }
 
   // make sure none of the options would result in death, and if so, just change it to something random to survive
-  fn ensure_safety(&self, snake: &Snake, result: &mut [[i32;2];4]) {
+  fn ensure_safety(&self, snake: &Snake, result: &mut [[i32;2];4]) -> bool {
+
+    // return type for if it succeded at finding a direction to move in that didnt result in death
+    let mut success = true;
+
     let fake_path = {let mut fp = self.clone(); fp.reverse(); fp};
     result.iter_mut().for_each(|i| {
       let fakepath_addition = {let mut e = fake_path.clone(); e.steps.push(*i); e};
@@ -231,11 +245,13 @@ impl Path {
 
         if !any_done {
           *i = [0,0];
+          success = false;
         }
-
       }
-
     });
+
+    success
+  
   }
 
   // simulate the entire inputed path as if it were in the real game, return false if there were no issues
